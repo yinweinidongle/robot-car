@@ -815,7 +815,7 @@ export default {
           const formData = new FormData()
           formData.append('file', file.raw)
 
-            const promise = axios.post('http://121.40.132.51:5005/api/waypoints', formData)
+            const promise = axios.post('http://localhost:5005/api/waypoints', formData)
               .then(response => {
                 const points = response.data.waypoints
                 const color = markerColors[i % markerColors.length]
@@ -2190,7 +2190,7 @@ export default {
 
         // 发送数据到后端
         //const response = await axios.post('http://localhost:5000/api/export', exportData)
-        const response = await axios.post('http://121.40.132.51:5005/api/export', exportData)
+        const response = await axios.post('http://localhost:5005/api/export', exportData)
         if (response.data.success) {
           // 处理每个文件的下载
           response.data.files.forEach(file => {

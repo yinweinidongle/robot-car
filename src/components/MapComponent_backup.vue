@@ -1665,7 +1665,7 @@ export default {
           if (file.status === 'ready') {
             const formData = new FormData()
             formData.append('file', file.raw)
-            const promise = axios.post('http://121.40.132.51:5005/api/waypoints', formData)
+            const promise = axios.post('http://localhost:5005/api/waypoints', formData)
               .then(response => {
                 const points = response.data.waypoints
                 console.log(`Processing file ${file.name}, points: ${points.length}`);
@@ -2343,7 +2343,7 @@ export default {
     const operationFormDialogVisible = ref(false)
 
     // 更新API URL
-    const API_URL = 'http://121.40.132.51:5005/api/farm' 
+    const API_URL = 'http://localhost:5005/api/farm' 
 
     // 获取作业地块记录
     const fetchOperations = async () => {
@@ -2573,8 +2573,8 @@ export default {
     const fetchVehicleSettings = async () => {
       try {
         loading.value = true
-        const response = await axios.get('http://121.40.132.51:5005/api/vehicles')
-        //const response = await axios.get('http://121.40.132.51:5005/api/vehicles')
+        const response = await axios.get('http://localhost:5005/api/vehicles')
+        //const response = await axios.get('http://localhost:5005/api/vehicles')
         if (response.data.success) {
           vehicleSettings.value = response.data.vehicles
         } else {
@@ -2633,8 +2633,8 @@ export default {
         }
         
         loading.value = true
-        const response = await axios.post('http://121.40.132.51:5005/api/vehicles', editVehicleForm.value)
-        //const response = await axios.post('http://121.40.132.51:5005/api/vehicles', editVehicleForm.value)
+        const response = await axios.post('http://localhost:5005/api/vehicles', editVehicleForm.value)
+        //const response = await axios.post('http://localhost:5005/api/vehicles', editVehicleForm.value)
         
         if (response.data.success) {
           ElMessage.success('车辆添加成功')
@@ -2669,11 +2669,11 @@ export default {
         
         loading.value = true
         const response = await axios.put(
-          `http://121.40.132.51:5005/api/vehicles/${editVehicleForm.value.id}`, 
+          `http://localhost:5005/api/vehicles/${editVehicleForm.value.id}`, 
           editVehicleForm.value
         )
         //const response = await axios.put(
-        //  `http://121.40.132.51:5005/api/vehicles/${editVehicleForm.value.id}`, 
+        //  `http://localhost:5005/api/vehicles/${editVehicleForm.value.id}`, 
         //  editVehicleForm.value
         //)
         
@@ -2707,8 +2707,8 @@ export default {
       ).then(async () => {
         try {
           loading.value = true
-          //const response = await axios.delete(`http://121.40.132.51:5005/api/vehicles/${vehicle.id}`)
-          const response = await axios.delete(`http://121.40.132.51:5005/api/vehicles/${vehicle.id}`)
+          //const response = await axios.delete(`http://localhost:5005/api/vehicles/${vehicle.id}`)
+          const response = await axios.delete(`http://localhost:5005/api/vehicles/${vehicle.id}`)
           
           if (response.data.success) {
             ElMessage.success('车辆删除成功')
@@ -2783,7 +2783,7 @@ export default {
       
       // 记录偏移量设置历史
       try {
-        await axios.post('http://121.40.132.51:5005/api/offset/history', {
+        await axios.post('http://localhost:5005/api/offset/history', {
           vehicle_id: id,
           longitude_offset,
           latitude_offset,
@@ -3045,7 +3045,7 @@ export default {
     const fetchWmsLayers = async () => {
       try {
         loading.value = true
-        const response = await axios.get('http://121.40.132.51:5005/api/wms/layers')
+        const response = await axios.get('http://localhost:5005/api/wms/layers')
         if (response.data.success) {
           wmsLayers.value = response.data.layers
           // 加载启用的WMS图层
@@ -3065,7 +3065,7 @@ export default {
     const toggleWmsLayer = async (layerId, enabled) => {
       try {
         loading.value = true
-        const response = await axios.put(`http://121.40.132.51:5005/api/wms/layers/${layerId}/toggle`, {
+        const response = await axios.put(`http://localhost:5005/api/wms/layers/${layerId}/toggle`, {
           enabled
         })
         
@@ -3182,7 +3182,7 @@ export default {
         }
         
         loading.value = true
-        const response = await axios.post('http://121.40.132.51:5005/api/wms/layers', editWmsLayerForm.value)
+        const response = await axios.post('http://localhost:5005/api/wms/layers', editWmsLayerForm.value)
         
         if (response.data.success) {
           ElMessage.success('WMS图层添加成功')
@@ -3219,7 +3219,7 @@ export default {
         
         loading.value = true
         const response = await axios.put(
-          `http://121.40.132.51:5005/api/wms/layers/${id}`, 
+          `http://localhost:5005/api/wms/layers/${id}`, 
           editWmsLayerForm.value
         )
         
@@ -3253,7 +3253,7 @@ export default {
       ).then(async () => {
         try {
           loading.value = true
-          const response = await axios.delete(`http://121.40.132.51:5005/api/wms/layers/${layer.id}`)
+          const response = await axios.delete(`http://localhost:5005/api/wms/layers/${layer.id}`)
           
           if (response.data.success) {
             ElMessage.success('WMS图层删除成功')
@@ -3290,7 +3290,7 @@ export default {
     const fetchOffsetHistory = async () => {
       try {
         historyLoading.value = true
-        const response = await axios.get(`http://121.40.132.51:5005/api/offset/history?page=${historyCurrentPage.value}&page_size=${historyPageSize.value}`)
+        const response = await axios.get(`http://localhost:5005/api/offset/history?page=${historyCurrentPage.value}&page_size=${historyPageSize.value}`)
         
         if (response.data.success) {
           offsetHistoryRecords.value = response.data.history.records
@@ -3338,7 +3338,7 @@ export default {
     const fetchObstacles = async () => {
       try {
         loading.value = true
-        const response = await axios.get('http://121.40.132.51:5005/api/obstacles')
+        const response = await axios.get('http://localhost:5005/api/obstacles')
         if (response.data.success) {
           obstacles.value = response.data.obstacles
           // 加载障碍物到地图
@@ -3564,7 +3564,7 @@ export default {
         if (editingObstacle.value) {
           // 更新现有障碍物
           const response = await axios.put(
-            `http://121.40.132.51:5005/api/obstacles/${editingObstacle.value.id}`, 
+            `http://localhost:5005/api/obstacles/${editingObstacle.value.id}`, 
             obstacleForm.value
           )
           
@@ -3578,7 +3578,7 @@ export default {
         } else {
           // 添加新障碍物
           const response = await axios.post(
-            'http://121.40.132.51:5005/api/obstacles', 
+            'http://localhost:5005/api/obstacles', 
             obstacleForm.value
           )
           
@@ -3652,7 +3652,7 @@ export default {
       ).then(async () => {
         try {
           loading.value = true
-          const response = await axios.delete(`http://121.40.132.51:5005/api/obstacles/${obstacle.id}`)
+          const response = await axios.delete(`http://localhost:5005/api/obstacles/${obstacle.id}`)
           
           if (response.data.success) {
             ElMessage.success('障碍物删除成功')
@@ -4029,7 +4029,7 @@ export default {
       ).then(async () => {
         try {
           loading.value = true
-          const response = await axios.delete(`http://121.40.132.51:5005/api/operations/${row.operation_id}`)
+          const response = await axios.delete(`http://localhost:5005/api/operations/${row.operation_id}`)
           
           if (response.data.success) {
             ElMessage.success('作业地块记录删除成功')
@@ -4072,7 +4072,7 @@ export default {
     const updateOperation = async (operation) => {
       try {
         loading.value = true
-        const response = await axios.put(`http://121.40.132.51:5005/api/operations/${operation.operation_id}`, operation)
+        const response = await axios.put(`http://localhost:5005/api/operations/${operation.operation_id}`, operation)
         
         if (response.data.success) {
           ElMessage.success('作业地块记录更新成功')
@@ -4093,7 +4093,7 @@ export default {
     const addOperation = async (operation) => {
       try {
         loading.value = true
-        const response = await axios.post('http://121.40.132.51:5005/api/operations', operation)
+        const response = await axios.post('http://localhost:5005/api/operations', operation)
         
         if (response.data.success) {
           ElMessage.success('作业地块记录添加成功')
@@ -4114,7 +4114,7 @@ export default {
     const fetchOperations = async () => {
       try {
         loading.value = true
-        const response = await axios.get(`http://121.40.132.51:5005/api/operations?page=${operationCurrentPage.value}&page_size=${operationPageSize.value}`)
+        const response = await axios.get(`http://localhost:5005/api/operations?page=${operationCurrentPage.value}&page_size=${operationPageSize.value}`)
         
         if (response.data.success) {
           operationRecords.value = response.data.operations.records
@@ -4145,7 +4145,7 @@ export default {
     // 导出作业地块记录
     const handleExportOperations = async () => {
       try {
-        const response = await axios.get('http://121.40.132.51:5005/api/operations/export', {
+        const response = await axios.get('http://localhost:5005/api/operations/export', {
           responseType: 'blob'
         })
         const blob = new Blob([response.data], { type: 'application/vnd.ms-excel' })
