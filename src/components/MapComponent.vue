@@ -983,13 +983,31 @@
     <!-- Excel表格管理对话框 -->
     <el-dialog
       v-model="tableManagementDialogVisible"
-      title="协和成地块作业地块"
+      title="表格管理"
       width="80%"
       :close-on-click-modal="false">
       <div class="table-management-container">
+        <!-- 表格列表和切换 -->
+        <div class="table-list-header">
+          <el-select v-model="selectedTableId" placeholder="选择表格" @change="handleTableChange" style="width: 200px;">
+            <el-option
+              v-for="table in excelTables"
+              :key="table.id"
+              :label="table.display_name"
+              :value="table.id"
+            />
+          </el-select>
+          <div class="table-actions">
+            <el-button type="primary" @click="handleAddTable" size="small">新增表格</el-button>
+            <el-button type="warning" @click="handleEditTable" size="small" :disabled="!selectedTableId">编辑表格</el-button>
+            <el-button type="danger" @click="handleDeleteTable" size="small" :disabled="!selectedTableId">删除表格</el-button>
+          </div>
+        </div>
+        
         <div class="table-management-toolbar">
-          <el-button type="primary" @click="handleAddTableRecord">新增记录</el-button>
-          <el-button type="success" @click="exportToExcel">导出Excel</el-button>
+          <el-button type="primary" @click="handleAddTableRecord" :disabled="!selectedTableId">新增记录</el-button>
+          <el-button type="success" @click="exportToExcel" :disabled="!selectedTableId">导出Excel</el-button>
+          <el-button type="warning" @click="showImportDialog" :disabled="!selectedTableId">导入Excel</el-button>
         </div>
         <el-table :data="tableRecords" border style="width: 100%">
           <el-table-column prop="id" label="作业行号" width="80" />
@@ -1083,6 +1101,59 @@
       </template>
     </el-dialog>
 
+    <!-- Excel导入对话框 -->
+    <el-dialog
+      v-model="importExcelDialogVisible"
+      title="导入Excel数据"
+      width="40%"
+      :close-on-click-modal="false">
+      <div class="import-excel-container">
+        <el-upload
+          class="excel-uploader"
+          action="#"
+          :auto-upload="false"
+          :on-change="handleExcelFileChange"
+          :file-list="excelFileList"
+          :limit="1"
+          accept=".xlsx,.xls">
+          <el-button type="primary">选择Excel文件</el-button>
+          <template #tip>
+            <div class="el-upload__tip">
+              只能上传.xlsx或.xls格式的Excel文件，且须符合表格字段格式
+            </div>
+          </template>
+        </el-upload>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="importExcelDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitExcelImport" :disabled="!hasExcelFile">导入</el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <!-- 表格添加/编辑对话框 -->
+    <el-dialog
+      v-model="tableDialogVisible"
+      :title="isEditingTable ? '编辑表格' : '新增表格'"
+      width="40%"
+      :close-on-click-modal="false">
+      <el-form :model="tableForm" label-width="100px">
+        <el-form-item label="表格名称" v-if="!isEditingTable">
+          <el-input v-model="tableForm.tableName" placeholder="请输入表格文件名，不含扩展名"></el-input>
+        </el-form-item>
+        <el-form-item label="显示名称">
+          <el-input v-model="tableForm.displayName" placeholder="请输入表格显示名称"></el-input>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="tableDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="saveTable">确定</el-button>
+        </span>
+      </template>
+    </el-dialog>
+
     <!-- 标记组管理对话框 -->
     <el-dialog
       v-model="markerGroupDialogVisible"
@@ -1094,13 +1165,13 @@
           <el-button type="primary" @click="handleAddMarkerGroup">新增标记组</el-button>
         </div>
         <el-table :data="markerGroups" border style="width: 100%">
-          <el-table-column prop="name" label="标记组名称" min-width="120" />
-          <el-table-column label="颜色" width="100">
+          <el-table-column prop="name" label="标记组名称" min-width="30" />
+          <el-table-column label="颜色" width="50">
             <template #default="scope">
               <div class="color-preview" :style="{ backgroundColor: scope.row.color }"></div>
             </template>
           </el-table-column>
-          <el-table-column label="可见性" width="100">
+          <el-table-column label="可见性" width="80">
             <template #default="scope">
               <el-switch
                 v-model="scope.row.is_visible"
@@ -1109,12 +1180,12 @@
                 :inactive-value="0" />
             </template>
           </el-table-column>
-          <el-table-column label="标记数量" width="100">
+          <el-table-column label="标记数量" width="80">
             <template #default="scope">
               {{ getMarkerCountByGroup(scope.row.id) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="250" fixed="right">
+          <el-table-column label="操作" width="400" fixed="right">
             <template #default="scope">
               <el-button 
                 type="primary" 
@@ -1258,8 +1329,16 @@
 </template>
 
 <script>
+/* eslint-disable no-unused-vars */
 import mapboxgl from 'mapbox-gl'
-import { onMounted, ref, computed, nextTick } from 'vue'
+import {
+  ref,
+  onMounted,
+  computed,
+  reactive,
+  watch,
+  nextTick
+} from 'vue'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Document, Location, Delete } from '@element-plus/icons-vue'
@@ -1295,6 +1374,12 @@ export default {
     let map = null
     const activeFile = ref(null)
 
+    // Table management related variables
+    const tableRecords = ref([])
+    const currentPage = ref(1)
+    const pageSize = ref(10)
+    const totalRecords = ref(0)
+    
     // 修改初始尺寸
     const sidebarWidth = ref(350) // 增加侧边栏宽度
     const mapHeight = ref(window.innerHeight * 0.65) // 调整地图高度比例
@@ -1748,6 +1833,7 @@ export default {
     }
 
     // 定位到表格行
+    // eslint-disable-next-line no-unused-vars
     const scrollToTableRow = (fileIndex, pointIndex) => {
       // 找到对应的行
       const targetRow = allWaypoints.value.find(
@@ -2920,7 +3006,7 @@ export default {
             // 前一个点在区域外，当前点在区域内，标记为驶入点
             pointType = POINT_TYPES.ENTRY
           } else if (isInWorkArea && !nextInArea) {
-            // 当前点在区域内，下一个点在区域外，标记为即将驶出点
+            // 当前点在区域内，下一个点在区域外，标记为驶出点
             pointType = POINT_TYPES.EXIT
           } else if (isInWorkArea) {
             // 在作业区内的普通点标记为作业点
@@ -4988,10 +5074,14 @@ export default {
     const tableManagementDialogVisible = ref(false)
     const recordDialogVisible = ref(false)
     const isEditingRecord = ref(false)
-    const tableRecords = ref([])
-    const currentPage = ref(1)
-    const pageSize = ref(10)
-    const totalRecords = ref(0)
+    // const editingRecordId = ref(null)  // Removed unused variable
+    
+    // Excel import dialog
+    const importExcelDialogVisible = ref(false)
+    const excelFileList = ref([])
+    const hasExcelFile = computed(() => excelFileList.value.length > 0)
+    
+    // Form for editing table records
     const recordForm = ref({
       id: null,
       cCarNo: '',
@@ -5007,11 +5097,18 @@ export default {
 
     // Fetch table records from the API
     const fetchTableRecords = async () => {
+      if (!selectedTableId.value) {
+        tableRecords.value = []
+        totalRecords.value = 0
+        return
+      }
+      
       try {
-        const response = await axios.get(`http://localhost:5005/api/tables?page=${currentPage.value}&page_size=${pageSize.value}`)
+        const response = await axios.get(`http://localhost:5005/api/tables?page=${currentPage.value}&page_size=${pageSize.value}&table_id=${selectedTableId.value}`)
         if (response.data.success) {
           tableRecords.value = response.data.data.records.map(record => ({
             id: record.id,
+            tableId: record.table_id,
             cCarNo: record.c_car_no,
             cLastTime: record.c_last_time,
             hCarNo: record.h_car_no,
@@ -5031,10 +5128,158 @@ export default {
         ElMessage.error('获取记录失败: ' + (error.response?.data?.error || error.message))
       }
     }
+    
+    // Fetch all excel tables
+    const fetchExcelTables = async () => {
+      try {
+        const response = await axios.get('http://localhost:5005/api/excel-tables')
+        if (response.data.success) {
+          excelTables.value = response.data.tables
+          
+          // Select the first table if none is selected
+          if (excelTables.value.length > 0 && !selectedTableId.value) {
+            selectedTableId.value = excelTables.value[0].id
+          }
+        } else {
+          ElMessage.error(response.data.error || '获取表格列表失败')
+        }
+      } catch (error) {
+        console.error('Error fetching excel tables:', error)
+        ElMessage.error('获取表格列表失败: ' + (error.response?.data?.error || error.message))
+      }
+    }
 
+    // Handle table change
+    const handleTableChange = (tableId) => {
+      selectedTableId.value = tableId
+      currentPage.value = 1
+      fetchTableRecords()
+    }
+    
+    // Add a new table
+    const handleAddTable = () => {
+      isEditingTable.value = false
+      tableForm.value = {
+        tableName: '',
+        displayName: ''
+      }
+      tableDialogVisible.value = true
+    }
+    
+    // Edit existing table
+    const handleEditTable = () => {
+      if (!selectedTableId.value) return
+      
+      const selectedTable = excelTables.value.find(t => t.id === selectedTableId.value)
+      if (selectedTable) {
+        isEditingTable.value = true
+        tableForm.value = {
+          tableName: selectedTable.table_name,
+          displayName: selectedTable.display_name
+        }
+        tableDialogVisible.value = true
+      }
+    }
+    
+    // Delete a table
+    const handleDeleteTable = () => {
+      if (!selectedTableId.value) return
+      
+      ElMessageBox.confirm(
+        '确定要删除这个表格吗？此操作将删除表格和所有相关记录。',
+        '警告',
+        {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning',
+        }
+      ).then(async () => {
+        try {
+          const response = await axios.delete(`http://localhost:5005/api/excel-tables/${selectedTableId.value}`)
+          if (response.data.success) {
+            ElMessage.success('表格删除成功')
+            
+            // Refresh tables and reset selection
+            selectedTableId.value = null
+            await fetchExcelTables()
+            
+            // If we still have tables, select the first one
+            if (excelTables.value.length > 0) {
+              selectedTableId.value = excelTables.value[0].id
+            }
+            
+            fetchTableRecords()
+          } else {
+            ElMessage.error(response.data.error || '删除表格失败')
+          }
+        } catch (error) {
+          console.error('Error deleting table:', error)
+          ElMessage.error('删除表格失败: ' + (error.response?.data?.error || error.message))
+        }
+      }).catch(() => {
+        // User cancelled, do nothing
+      })
+    }
+    
+    // Save a table (create or update)
+    const saveTable = async () => {
+      if (isEditingTable.value && !selectedTableId.value) {
+        ElMessage.error('无法编辑：没有选择表格')
+        return
+      }
+      
+      if (!tableForm.value.displayName) {
+        ElMessage.error('请输入表格显示名称')
+        return
+      }
+      
+      if (!isEditingTable.value && !tableForm.value.tableName) {
+        ElMessage.error('请输入表格名称')
+        return
+      }
+      
+      try {
+        const tableData = {
+          display_name: tableForm.value.displayName
+        }
+        
+        if (!isEditingTable.value) {
+          tableData.table_name = tableForm.value.tableName
+        }
+        
+        let response
+        if (isEditingTable.value) {
+          response = await axios.put(`http://localhost:5005/api/excel-tables/${selectedTableId.value}`, tableData)
+        } else {
+          response = await axios.post('http://localhost:5005/api/excel-tables', tableData)
+        }
+        
+        if (response.data.success) {
+          ElMessage.success(isEditingTable.value ? '表格更新成功' : '表格添加成功')
+          tableDialogVisible.value = false
+          
+          // Refresh tables
+          await fetchExcelTables()
+          
+          // If we created a new table, select it
+          if (!isEditingTable.value && response.data.id) {
+            selectedTableId.value = response.data.id
+          }
+          
+          fetchTableRecords()
+        } else {
+          ElMessage.error(response.data.error || '保存表格失败')
+        }
+      } catch (error) {
+        console.error('Error saving table:', error)
+        ElMessage.error('保存表格失败: ' + (error.response?.data?.error || error.message))
+      }
+    }
+    
     // Show the table management dialog
-    const showTableManagementDialog = () => {
+    const showTableManagementDialog = async () => {
       tableManagementDialogVisible.value = true
+      await fetchExcelTables()
       fetchTableRecords()
     }
 
@@ -5052,9 +5297,15 @@ export default {
 
     // Handle adding a new table record
     const handleAddTableRecord = () => {
+      if (!selectedTableId.value) {
+        ElMessage.warning('请先选择一个表格')
+        return
+      }
+      
       isEditingRecord.value = false
       recordForm.value = {
         id: null,
+        tableId: selectedTableId.value,
         cCarNo: '',
         cLastTime: '',
         hCarNo: '',
@@ -5073,6 +5324,7 @@ export default {
       isEditingRecord.value = true
       recordForm.value = {
         id: row.id,
+        tableId: row.tableId,
         cCarNo: row.cCarNo,
         cLastTime: row.cLastTime,
         hCarNo: row.hCarNo,
@@ -5090,6 +5342,7 @@ export default {
     const saveTableRecord = async () => {
       try {
         const record = {
+          table_id: recordForm.value.tableId,
           c_car_no: recordForm.value.cCarNo,
           c_last_time: recordForm.value.cLastTime,
           h_car_no: recordForm.value.hCarNo,
@@ -5150,14 +5403,36 @@ export default {
         // User cancelled, do nothing
       })
     }
+    
+    // Show import dialog
+    const showImportDialog = () => {
+      if (!selectedTableId.value) {
+        ElMessage.warning('请先选择一个表格')
+        return
+      }
+      excelFileList.value = []
+      importExcelDialogVisible.value = true
+    }
 
     // Export table records to Excel
     const exportToExcel = async () => {
+      if (!selectedTableId.value) {
+        ElMessage.warning('请先选择一个表格')
+        return
+      }
+      
       try {
-        // Fetch all records for export
-        const response = await axios.get('http://localhost:5005/api/tables/export')
+        const response = await axios.get(`http://localhost:5005/api/tables/export?table_id=${selectedTableId.value}`)
+        
         if (response.data.success) {
-          const records = response.data.data.map(record => ({
+          const records = response.data.data
+          
+          // Get the table name for the file
+          const table = excelTables.value.find(t => t.id === selectedTableId.value)
+          const fileName = table ? table.display_name : '表格数据'
+          
+          // Prepare data for Excel
+          const excelData = records.map(record => ({
             '作业行号': record.id,
             'C车编号': record.c_car_no,
             'C系列最后一次采样时间': record.c_last_time,
@@ -5170,15 +5445,11 @@ export default {
             '备注': record.notes
           }))
           
-          // Create worksheet
-          const worksheet = XLSX.utils.json_to_sheet(records)
-          
-          // Create workbook
-          const workbook = XLSX.utils.book_new()
-          XLSX.utils.book_append_sheet(workbook, worksheet, '协和成地块作业地块')
-          
           // Generate Excel file
-          XLSX.writeFile(workbook, '协和成地块作业地块.xlsx')
+          const worksheet = XLSX.utils.json_to_sheet(excelData)
+          const workbook = XLSX.utils.book_new()
+          XLSX.utils.book_append_sheet(workbook, worksheet, fileName)
+          XLSX.writeFile(workbook, `${fileName}.xlsx`)
           
           ElMessage.success('导出Excel成功')
         } else {
@@ -5187,6 +5458,52 @@ export default {
       } catch (error) {
         console.error('Error exporting to Excel:', error)
         ElMessage.error('导出Excel失败: ' + (error.response?.data?.error || error.message))
+      }
+    }
+    
+    // Handle Excel file selection
+    const handleExcelFileChange = (file) => {
+      excelFileList.value = [file]
+    }
+    
+    // Submit Excel file for import
+    const submitExcelImport = async () => {
+      if (excelFileList.value.length === 0) {
+        ElMessage.warning('请先选择Excel文件')
+        return
+      }
+      
+      try {
+        const formData = new FormData()
+        formData.append('file', excelFileList.value[0].raw)
+        
+        const response = await axios.post('http://localhost:5005/api/tables/import', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        })
+        
+        if (response.data.success) {
+          ElMessage.success(response.data.message || '导入成功')
+          importExcelDialogVisible.value = false
+          excelFileList.value = []
+          
+          // Refresh tables
+          await fetchExcelTables()
+          
+          // Select the table that was just imported into
+          if (response.data.result && response.data.result.table_id) {
+            selectedTableId.value = response.data.result.table_id
+          }
+          
+          // Refresh table data
+          fetchTableRecords()
+        } else {
+          ElMessage.error(response.data.error || '导入失败')
+        }
+      } catch (error) {
+        console.error('Error importing Excel:', error)
+        ElMessage.error('导入Excel失败: ' + (error.response?.data?.error || error.message))
       }
     }
 
@@ -5717,6 +6034,55 @@ export default {
       })
     }
 
+    // 初始化点图层
+    const initPointsLayer = () => {
+      if (!map) return
+      
+      // 添加点位图层
+      map.addSource('points', {
+        type: 'geojson',
+        data: pointsData.value
+      })
+      
+      // 添加点位图层
+      map.addLayer({
+        id: 'points',
+        type: 'circle',
+        source: 'points',
+        paint: {
+          'circle-radius': 5,
+          'circle-color': ['get', 'color'],
+          'circle-stroke-width': 1,
+          'circle-stroke-color': '#fff'
+        }
+      })
+    }
+    
+    // 处理绘制创建
+    const handleDrawCreate = (e) => {
+      console.log('绘制创建:', e)
+    }
+    
+    // 处理绘制删除
+    const handleDrawDelete = (e) => {
+      console.log('绘制删除:', e)
+    }
+    
+    // 处理绘制更新
+    const handleDrawUpdate = (e) => {
+      console.log('绘制更新:', e)
+    }
+
+    // 添加表格管理变量
+    const excelTables = ref([])
+    const selectedTableId = ref(null)
+    const tableDialogVisible = ref(false)
+    const isEditingTable = ref(false)
+    const tableForm = ref({
+      tableName: '',
+      displayName: ''
+    })
+
     return {
       mapContainer,
       fileList,
@@ -5843,13 +6209,10 @@ export default {
       handleMeasureDistance,
       // Table management
       tableManagementDialogVisible,
-      recordDialogVisible,
-      isEditingRecord,
       tableRecords,
       currentPage,
       pageSize,
       totalRecords,
-      recordForm,
       showTableManagementDialog,
       handleSizeChange,
       handleCurrentChange,
@@ -5857,7 +6220,34 @@ export default {
       handleEditTableRecord,
       saveTableRecord,
       handleDeleteTableRecord,
+      
+      // Excel file management
       exportToExcel,
+      importExcelDialogVisible,
+      excelFileList,
+      hasExcelFile,
+      handleExcelFileChange,
+      submitExcelImport,
+      showImportDialog,
+      
+      // Multiple tables management
+      excelTables,
+      selectedTableId,
+      tableDialogVisible,
+      isEditingTable,
+      tableForm,
+      handleTableChange,
+      handleAddTable,
+      handleEditTable,
+      handleDeleteTable,
+      saveTable,
+      
+      // Record form
+      recordDialogVisible,
+      recordForm,
+      isEditingRecord,
+      
+      // Marker management
       markerGroupDialogVisible,
       markerGroupEditDialogVisible,
       markerGroups,
@@ -5888,7 +6278,6 @@ export default {
       fetchAllMarkers,
       updateMarkersOnMap,
       addMarkerToMap,
-      // 添加标记相关方法
       handleAddMarker,
       startSelectMarkerLocation,
       saveMarker,
@@ -6713,13 +7102,13 @@ export default {
 
 /* 表格管理对话框样式 */
 .table-management-container {
-  padding: 10px;
+  overflow: auto;
+  max-height: 70vh;
 }
 
 .table-management-toolbar {
   margin-bottom: 15px;
   display: flex;
-  justify-content: flex-start;
   gap: 10px;
 }
 
@@ -6729,220 +7118,59 @@ export default {
   justify-content: flex-end;
 }
 
-/* 添加颜色预览样式 */
-.color-preview {
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  border: 1px solid #ddd;
-  margin: 0 auto;
+/* Excel导入对话框样式 */
+.import-excel-container {
+  padding: 20px;
 }
 
-/* 障碍物表单样式 */
-.obstacle-form {
-  margin-top: 10px;
+.excel-uploader {
+  text-align: center;
+  border: 1px dashed #d9d9d9;
+  border-radius: 6px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  padding: 30px 0;
 }
 
-.color-picker-container {
-  display: flex;
-  align-items: center;
-  gap: 15px;
+.excel-uploader:hover {
+  border-color: #409EFF;
 }
 
-.color-preview-large {
-  width: 40px;
-  height: 40px;
-  border-radius: 4px;
-  border: 1px solid #ddd;
-}
-
-/* 颜色预览行样式 */
-.color-preview-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.color-value {
+.el-upload__tip {
   font-size: 12px;
   color: #606266;
+  margin-top: 7px;
 }
 
-/* 添加航点偏移量设置对话框样式 */
-.offset-prompt {
-  text-align: center;
-  font-size: 16px;
-  margin: 20px 0;
-}
-
-.upload-offset-form {
-  margin-bottom: 10px;
-}
-
-.upload-offset-desc {
-  margin-bottom: 15px;
-  font-size: 14px;
-  color: #606266;
-}
-
-.upload-offset-form .add-btn {
-  margin-top: 15px;
-  text-align: center;
-}
-
-.upload-offset-form .confirm-btn {
-  color: #67c23a;
-}
-
-.offset-preview {
-  margin-bottom: 20px;
-  padding: 15px;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  background-color: #f9f9f9;
-}
-
-.preview-title {
-  font-weight: bold;
-  margin-bottom: 10px;
-}
-
-.preview-content {
-  position: relative;
-  height: 120px;
-  background-color: #fff;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  margin-bottom: 10px;
-}
-
-.preview-point {
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.preview-point.original {
-  background-color: #409EFF;
-  left: 50px;
-  top: 50px;
-}
-
-.preview-point.offset {
-  background-color: #67c23a;
-  border: 2px solid #fff;
-  box-shadow: 0 0 4px rgba(0,0,0,0.3);
-}
-
-.preview-arrow {
-  position: absolute;
-  left: 65px;
-  top: 46px;
-  color: #909399;
-}
-
-.preview-info {
-  text-align: center;
-  font-size: 13px;
-  color: #606266;
-}
-
-.measure-button {
-  background-color: #E6A23C;
-  border-color: #E6A23C;
-}
-
-.measure-button:hover {
-  background-color: #ebb563;
-  border-color: #ebb563;
-}
-
-/* 标记组按钮样式 */
-.marker-group-button {
-  background-color: #409EFF;
-  border-color: #409EFF;
-}
-
-.marker-group-button:hover {
-  background-color: #66b1ff;
-  border-color: #66b1ff;
-}
-
-/* 添加标记按钮样式 */
-.add-marker-button {
-  background-color: #409EFF;
-  border-color: #409EFF;
-}
-
-.add-marker-button:hover {
-  background-color: #66b1ff;
-  border-color: #66b1ff;
-}
-
-/* Excel表格管理按钮样式 */
-.excel-button {
-  background-color: #409EFF;
-  border-color: #409EFF;
-}
-
-.excel-button:hover {
-  background-color: #66b1ff;
-  border-color: #66b1ff;
-}
-
-/* 标记组管理对话框样式 */
-.marker-group-container {
-  padding: 10px;
-}
-
-.marker-group-toolbar {
-  margin-bottom: 15px;
+/* 表格管理样式 */
+.table-management-container {
   display: flex;
-  justify-content: flex-start;
+  flex-direction: column;
   gap: 10px;
 }
 
-.marker-list-container {
-  margin-top: 20px;
-  padding: 15px;
-  border-top: 1px solid #ebeef5;
-}
-
-.marker-list-header {
+.table-list-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
-}
-
-.marker-list-header h3 {
-  margin: 0;
-  font-size: 16px;
-}
-
-.selected-location {
-  background-color: #f5f7fa;
-  padding: 10px;
-  border-radius: 4px;
   margin-bottom: 10px;
 }
 
-.location-info {
+.table-actions {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-  font-size: 14px;
-  color: #606266;
+  gap: 10px;
 }
 
-.custom-marker {
-  cursor: pointer;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+.table-management-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
-/* 表格管理对话框样式 */
-.table-management-container {
-  padding: 10px;
+.pagination-container {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
 }
 </style>

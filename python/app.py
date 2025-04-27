@@ -627,8 +627,9 @@ def get_table_records():
     try:
         page = request.args.get('page', default=1, type=int)
         page_size = request.args.get('page_size', default=10, type=int)
+        table_id = request.args.get('table_id', type=int)
         
-        result = table_settings.get_all_records(page, page_size)
+        result = table_settings.get_all_records(page, page_size, table_id)
         return jsonify({
             'success': True,
             'data': result
@@ -731,12 +732,183 @@ def delete_table_record(record_id):
 @app.route('/api/tables/export', methods=['GET'])
 def export_table_records():
     try:
-        records = table_settings.get_all_records_for_export()
+        table_id = request.args.get('table_id', type=int)
+        records = table_settings.get_all_records_for_export(table_id)
         return jsonify({
             'success': True,
             'data': records
         })
     except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# Add new endpoints for managing excel tables
+@app.route('/api/excel-tables', methods=['GET'])
+def get_excel_tables():
+    try:
+        tables = table_settings.get_all_tables()
+        return jsonify({
+            'success': True,
+            'tables': tables
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/excel-tables', methods=['POST'])
+def add_excel_table():
+    try:
+        table_data = request.json
+        if not table_data or 'table_name' not in table_data or 'display_name' not in table_data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing table name or display name'
+            }), 400
+        
+        table_id, error = table_settings.add_table(table_data)
+        if table_id:
+            return jsonify({
+                'success': True,
+                'id': table_id,
+                'message': 'Table added successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': error
+            }), 400
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/excel-tables/<int:table_id>', methods=['PUT'])
+def update_excel_table(table_id):
+    try:
+        table_data = request.json
+        if not table_data or 'display_name' not in table_data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing display name'
+            }), 400
+        
+        success, error = table_settings.update_table(table_id, table_data)
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Table updated successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': error
+            }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/excel-tables/<int:table_id>', methods=['DELETE'])
+def delete_excel_table(table_id):
+    try:
+        success = table_settings.delete_table(table_id)
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Table deleted successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Table with ID {table_id} not found'
+            }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/tables/import', methods=['POST'])
+def import_excel_data():
+    try:
+        if 'file' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': 'No file uploaded'
+            }), 400
+            
+        file = request.files['file']
+        if not file:
+            return jsonify({
+                'success': False,
+                'error': 'Empty file'
+            }), 400
+            
+        # Check file extension
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid file format. Only Excel files (.xlsx, .xls) are supported.'
+            }), 400
+        
+        # Process Excel file
+        try:
+            import pandas as pd
+            import io
+            
+            # Read Excel file
+            df = pd.read_excel(io.BytesIO(file.read()))
+            
+            # Convert DataFrame to list of dictionaries
+            # Map Excel column names to database field names
+            column_mapping = {
+                'C车编号': 'c_car_no',
+                'C系列最后一次采样时间': 'c_last_time',
+                'H车编号': 'h_car_no',
+                'H系列最后一次作业时间': 'h_last_time',
+                'Z车编号': 'z_car_no',
+                'Z系列最后一次作业时间': 'z_last_time',
+                '点间距离': 'point_distance',
+                '采样文件': 'sample_file',
+                '备注': 'notes'
+            }
+            
+            # Rename columns based on mapping
+            renamed_df = df.rename(columns=column_mapping)
+            
+            # Drop any columns that don't exist in our mapping
+            valid_columns = list(column_mapping.values())
+            for col in renamed_df.columns:
+                if col not in valid_columns and col != '作业行号':
+                    renamed_df = renamed_df.drop(col, axis=1)
+            
+            # Convert to list of dictionaries
+            records = renamed_df.to_dict('records')
+            
+            # Import records with the file name
+            result = table_settings.import_excel_records(records, file.filename)
+            
+            return jsonify({
+                'success': True,
+                'message': f'导入完成: 共导入{result["added"]}条记录，失败{result["failed"]}条记录',
+                'result': result
+            })
+            
+        except Exception as e:
+            print(f"Error processing Excel file: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': f'处理Excel文件失败: {str(e)}'
+            }), 400
+    
+    except Exception as e:
+        print(f"Error importing Excel data: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
